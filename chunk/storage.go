@@ -4,7 +4,7 @@ import (
 	"errors"
 	"sync"
 
-	. "github.com/claudetech/loggo/default"
+	log "github.com/sirupsen/logrus"
 )
 
 // ErrTimeout is a timeout error
@@ -62,7 +62,7 @@ func (s *Storage) Store(id string, bytes []byte) error {
 	if "" != deleteID {
 		delete(s.chunks, deleteID)
 
-		Log.Debugf("Deleted chunk %v", deleteID)
+		log.Debugf("Deleted chunk %v", deleteID)
 	}
 
 	s.chunks[id] = bytes

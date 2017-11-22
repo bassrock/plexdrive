@@ -17,7 +17,6 @@ import (
 
 	"runtime"
 
-	"github.com/claudetech/loggo"
 	. "github.com/claudetech/loggo/default"
 	"github.com/dweidenfeld/plexdrive/chunk"
 	"github.com/dweidenfeld/plexdrive/config"
@@ -25,15 +24,12 @@ import (
 	"github.com/dweidenfeld/plexdrive/mount"
 	flag "github.com/ogier/pflag"
 	"golang.org/x/sys/unix"
+
+	log "github.com/sirupsen/logrus"
+	"gopkg.in/gemnasium/logrus-graylog-hook.v2"
 )
 
 func main() {
-	// get the users home dir
-	user, err := user.Current()
-	if nil != err {
-		
-	}
-	
 	// Find users home directory
 	usr, err := user.Current()
 	home := ""
@@ -46,7 +42,7 @@ func main() {
 	    	panic(fmt.Sprintf("Could not read users homedir %v\n", err))
 	    }
 	} else {
-	    home = user.HomeDir	
+	    home = usr.HomeDir
 	}
 
 	// parse the command line arguments
@@ -65,6 +61,8 @@ func main() {
 	argUID := flag.Int64("uid", -1, "Set the mounts UID (-1 = default permissions)")
 	argGID := flag.Int64("gid", -1, "Set the mounts GID (-1 = default permissions)")
 	argUmask := flag.Uint32("umask", 0, "Override the default file permissions")
+	argGraylog := flag.String("graylog-server", "none", "The graylog server and port")
+
 	// argDownloadSpeedLimit := flag.String("speed-limit", "", "This value limits the download speed, e.g. 5M = 5MB/s per chunk (units: B, K, M, G)")
 	flag.Parse()
 
@@ -105,57 +103,64 @@ func main() {
 		}
 
 		// initialize the logger with the specific log level
-		var logLevel loggo.Level
+		var logLevel log.Level
 		switch *argLogLevel {
 		case 0:
-			logLevel = loggo.Error
+			logLevel = log.ErrorLevel
 		case 1:
-			logLevel = loggo.Warning
+			logLevel = log.WarnLevel
 		case 2:
-			logLevel = loggo.Info
+			logLevel = log.InfoLevel
 		case 3:
-			logLevel = loggo.Debug
+			logLevel = log.DebugLevel
 		case 4:
-			logLevel = loggo.Trace
+			logLevel = log.DebugLevel
 		default:
-			logLevel = loggo.Warning
+			logLevel = log.WarnLevel
 		}
-		Log.SetLevel(logLevel)
+		log.SetLevel(logLevel)
+
+		if *argGraylog != "none" {
+			hook := graylog.NewAsyncGraylogHook(*argGraylog, map[string]interface{}{})
+			defer hook.Flush()
+			log.AddHook(hook)
+		}
+
 
 		// debug all given parameters
-		Log.Debugf("verbosity            : %v", logLevel)
-		Log.Debugf("root-node-id         : %v", *argRootNodeID)
-		Log.Debugf("config               : %v", *argConfigPath)
-		Log.Debugf("cache-file           : %v", *argCacheFile)
-		Log.Debugf("chunk-size           : %v", *argChunkSize)
-		Log.Debugf("chunk-load-threads   : %v", *argChunkLoadThreads)
-		Log.Debugf("chunk-check-threads  : %v", *argChunkCheckThreads)
-		Log.Debugf("chunk-load-ahead     : %v", *argChunkLoadAhead)
-		Log.Debugf("max-chunks           : %v", *argMaxChunks)
-		Log.Debugf("refresh-interval     : %v", *argRefreshInterval)
-		Log.Debugf("fuse-options         : %v", *argMountOptions)
-		Log.Debugf("UID                  : %v", uid)
-		Log.Debugf("GID                  : %v", gid)
-		Log.Debugf("umask                : %v", umask)
-		// Log.Debugf("speed-limit          : %v", *argDownloadSpeedLimit)
+		log.Debugf("verbosity            : %v", logLevel)
+		log.Debugf("root-node-id         : %v", *argRootNodeID)
+		log.Debugf("config               : %v", *argConfigPath)
+		log.Debugf("cache-file           : %v", *argCacheFile)
+		log.Debugf("chunk-size           : %v", *argChunkSize)
+		log.Debugf("chunk-load-threads   : %v", *argChunkLoadThreads)
+		log.Debugf("chunk-check-threads  : %v", *argChunkCheckThreads)
+		log.Debugf("chunk-load-ahead     : %v", *argChunkLoadAhead)
+		log.Debugf("max-chunks           : %v", *argMaxChunks)
+		log.Debugf("refresh-interval     : %v", *argRefreshInterval)
+		log.Debugf("fuse-options         : %v", *argMountOptions)
+		log.Debugf("UID                  : %v", uid)
+		log.Debugf("GID                  : %v", gid)
+		log.Debugf("umask                : %v", umask)
+		// log.Debugf("speed-limit          : %v", *argDownloadSpeedLimit)
 		// version missing here
 
 		// create all directories
 		if err := os.MkdirAll(*argConfigPath, 0766); nil != err {
-			Log.Errorf("Could not create configuration directory")
-			Log.Debugf("%v", err)
+			log.Errorf("Could not create configuration directory")
+			log.Debugf("%v", err)
 			os.Exit(1)
 		}
 		if err := os.MkdirAll(filepath.Dir(*argCacheFile), 0766); nil != err {
-			Log.Errorf("Could not create cache file directory")
-			Log.Debugf("%v", err)
+			log.Errorf("Could not create cache file directory")
+			log.Debugf("%v", err)
 			os.Exit(1)
 		}
 
 		// set the global buffer configuration
 		chunkSize, err := parseSizeArg(*argChunkSize)
 		if nil != err {
-			Log.Errorf("%v", err)
+			log.Errorf("%v", err)
 			os.Exit(2)
 		}
 
@@ -165,22 +170,22 @@ func main() {
 		if nil != err {
 			cfg, err = config.Create(configPath)
 			if nil != err {
-				Log.Errorf("Could not read configuration")
-				Log.Debugf("%v", err)
+				log.Errorf("Could not read configuration")
+				log.Debugf("%v", err)
 				os.Exit(3)
 			}
 		}
 
 		cache, err := drive.NewCache(*argCacheFile, *argConfigPath, *argLogLevel > 3)
 		if nil != err {
-			Log.Errorf("%v", err)
+			log.Errorf("%v", err)
 			os.Exit(4)
 		}
 		defer cache.Close()
 
 		client, err := drive.NewClient(cfg, cache, *argRefreshInterval, *argRootNodeID)
 		if nil != err {
-			Log.Errorf("%v", err)
+			log.Errorf("%v", err)
 			os.Exit(4)
 		}
 
@@ -192,18 +197,18 @@ func main() {
 			client,
 			*argMaxChunks)
 		if nil != err {
-			Log.Errorf("%v", err)
+			log.Errorf("%v", err)
 			os.Exit(4)
 		}
 
 		// check os signals like SIGINT/TERM
 		checkOsSignals(argMountPoint)
 		if err := mount.Mount(client, chunkManager, argMountPoint, mountOptions, uid, gid, umask); nil != err {
-			Log.Debugf("%v", err)
+			log.Debugf("%v", err)
 			os.Exit(5)
 		}
 	} else {
-		Log.Errorf("Command %v not found", argCommand)
+		log.Errorf("Command %v not found", argCommand)
 	}
 }
 
@@ -215,7 +220,7 @@ func checkOsSignals(mountpoint string) {
 		for sig := range signals {
 			if sig == syscall.SIGINT {
 				if err := mount.Unmount(mountpoint, false); nil != err {
-					Log.Warningf("%v", err)
+					log.Warningf("%v", err)
 				}
 			}
 		}
@@ -247,7 +252,7 @@ func parseSizeArg(input string) (int64, error) {
 	input = input[:len(input)-suffixLen]
 	value, err := strconv.ParseFloat(input, 64)
 	if nil != err {
-		Log.Debugf("%v", err)
+		log.Debugf("%v", err)
 		return 0, fmt.Errorf("Could not parse numeric value %v", input)
 	}
 	if value < 0 {

@@ -3,7 +3,7 @@ package chunk
 import (
 	"fmt"
 
-	. "github.com/claudetech/loggo/default"
+	log "github.com/sirupsen/logrus"
 
 	"math"
 
@@ -163,7 +163,7 @@ func (m *Manager) checkChunk(req *Request, response chan Response) {
 		}
 
 		if err := m.storage.Store(req.id, bytes); nil != err {
-			Log.Warningf("Coult not store chunk %v", req.id)
+			log.Warningf("Coult not store chunk %v", req.id)
 		}
 	})
 }

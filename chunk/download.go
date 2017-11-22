@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	. "github.com/claudetech/loggo/default"
+	log "github.com/sirupsen/logrus"
 	"github.com/dweidenfeld/plexdrive/drive"
 )
 
@@ -56,7 +56,7 @@ func (d *Downloader) thread() {
 }
 
 func (d *Downloader) download(client *http.Client, req *Request) {
-	Log.Debugf("Starting download %v (preload: %v)", req.id, req.preload)
+	log.Debugf("Starting download %v (preload: %v)", req.id, req.preload)
 	bytes, err := downloadFromAPI(client, req, 0)
 
 	d.lock.Lock()
@@ -76,17 +76,17 @@ func downloadFromAPI(client *http.Client, request *Request, delay int64) ([]byte
 
 	req, err := http.NewRequest("GET", request.object.DownloadURL, nil)
 	if nil != err {
-		Log.Debugf("%v", err)
+		log.Debugf("%v", err)
 		return nil, fmt.Errorf("Could not create request object %v (%v) from API", request.object.ObjectID, request.object.Name)
 	}
 
 	req.Header.Add("Range", fmt.Sprintf("bytes=%v-%v", request.offsetStart, request.offsetEnd))
 
-	Log.Tracef("Sending HTTP Request %v", req)
+	log.Debugf("Sending HTTP Request %v", req)
 
 	res, err := client.Do(req)
 	if nil != err {
-		Log.Debugf("%v", err)
+		log.Debugf("%v", err)
 		return nil, fmt.Errorf("Could not request object %v (%v) from API", request.object.ObjectID, request.object.Name)
 	}
 	defer res.Body.Close()
@@ -94,8 +94,8 @@ func downloadFromAPI(client *http.Client, request *Request, delay int64) ([]byte
 
 	if res.StatusCode != 206 {
 		if res.StatusCode != 403 && res.StatusCode != 500 {
-			Log.Debugf("Request\n----------\n%v\n----------\n", req)
-			Log.Debugf("Response\n----------\n%v\n----------\n", res)
+			log.Debugf("Request\n----------\n%v\n----------\n", req)
+			log.Debugf("Response\n----------\n%v\n----------\n", res)
 			return nil, fmt.Errorf("Wrong status code %v for %v", res.StatusCode, request.object)
 		}
 
@@ -105,7 +105,7 @@ func downloadFromAPI(client *http.Client, request *Request, delay int64) ([]byte
 		}
 		bytes, err := ioutil.ReadAll(reader)
 		if nil != err {
-			Log.Debugf("%v", err)
+			log.Debugf("%v", err)
 			return nil, fmt.Errorf("Could not read body of error")
 		}
 		body := string(bytes)
@@ -123,14 +123,14 @@ func downloadFromAPI(client *http.Client, request *Request, delay int64) ([]byte
 		}
 
 		// return an error if other error occurred
-		Log.Debugf("%v", body)
+		log.Debugf("%v", body)
 		return nil, fmt.Errorf("Could not read object %v (%v) / StatusCode: %v",
 			request.object.ObjectID, request.object.Name, res.StatusCode)
 	}
 
 	bytes, err := ioutil.ReadAll(reader)
 	if nil != err {
-		Log.Debugf("%v", err)
+		log.Debugf("%v", err)
 		return nil, fmt.Errorf("Could not read objects %v (%v) API response", request.object.ObjectID, request.object.Name)
 	}
 

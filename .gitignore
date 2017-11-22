@@ -1,2 +1,4 @@
 plexdrive
 .idea
+_vendor-*
+vendor
